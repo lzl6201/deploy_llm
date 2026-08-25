@@ -1,0 +1,45 @@
+services:
+  master:
+    build: ./master
+    image: ghcr.io/lzl6201/deploy_llm/master:latest
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: sqlite:////data/deploy_llm.db
+      AGENT_AUTH_TOKEN: ${AGENT_AUTH_TOKEN:-change-me-agent-token}
+      MODEL_STORAGE_BASE: /mnt/models
+      ALLOWED_FS_ROOTS: /mnt/models
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_DOWNLOAD_DIR: /mnt/models
+    volumes:
+      - ./data:/data
+      # NFS 模型共享存储挂载到 Master 与各 Agent 相同的路径
+      - /mnt/models:/mnt/models:ro
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    image: ghcr.io/lzl6201/deploy_llm/frontend:latest
+    ports:
+      - "8080:80"
+    depends_on:
+      - master
+    restart: unless-stopped
+
+  # 可选：Agent 容器化（Linux GPU 节点）。
+  # 需 NVIDIA Container Toolkit + 挂载 llama.cpp 二进制与模型存储；P0 推荐裸机运行。
+  agent:
+    build: ./agent
+    image: ghcr.io/lzl6201/deploy_llm/agent:latest
+    profiles: ["agent"]
+    network_mode: host
+    environment:
+      MASTER_URL: ${MASTER_URL:-http://<master-host>:8000}
+      AGENT_AUTH_TOKEN: ${AGENT_AUTH_TOKEN:-change-me-agent-token}
+      LLAMA_CPP_BIN_DIR: ${LLAMA_CPP_BIN_DIR:-/opt/llama.cpp/bin}
+    volumes:
+      - /mnt/models:/mnt/models:ro
+      - ${LLAMA_CPP_BIN_DIR:-/opt/llama.cpp/bin}:/opt/llama.cpp/bin:ro
+    gpus: all
+    restart: unless-stopped
