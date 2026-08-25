@@ -43,6 +43,12 @@ const routes = [
         component: () => import('../views/Quantize.vue'),
         meta: { title: '模型量化' },
       },
+      {
+        path: 'monitor',
+        name: 'Monitor',
+        component: () => import('../views/Monitor.vue'),
+        meta: { title: '监控告警' },
+      },
     ],
   },
 ]

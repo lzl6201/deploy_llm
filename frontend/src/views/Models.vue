@@ -7,6 +7,7 @@
             <span class="title">模型仓库</span>
             <div>
               <el-button @click="openManual">手动登记</el-button>
+              <el-button @click="openPrequantized">预量化导入</el-button>
               <el-button type="primary" @click="openImport">导入 GGUF 模型</el-button>
             </div>
           </div>
@@ -171,6 +172,51 @@
       </template>
     </el-dialog>
 
+    <!-- 预量化导入（FP8 / AWQ / GPTQ 等非 GGUF） -->
+    <el-dialog v-model="prequantizedVisible" title="预量化导入" width="560px">
+      <el-form :model="prequantizedForm" label-width="110px">
+        <el-form-item label="模型名" required>
+          <el-input v-model="prequantizedForm.name" placeholder="如 Qwen2.5-7B-Instruct" />
+        </el-form-item>
+        <el-form-item label="参数量(B)" required>
+          <el-input-number v-model="prequantizedForm.params_b" :min="0" :step="1" />
+        </el-form-item>
+        <el-form-item label="量化档位" required>
+          <el-select v-model="prequantizedForm.quantization">
+            <el-option label="FP8" value="fp8" />
+            <el-option label="AWQ-INT4" value="awq-int4" />
+            <el-option label="GPTQ" value="gptq" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="基础精度">
+          <el-select v-model="prequantizedForm.dtype">
+            <el-option label="BF16" value="bf16" />
+            <el-option label="FP16" value="fp16" />
+            <el-option label="FP32" value="fp32" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="版本号">
+          <el-input v-model="prequantizedForm.version" placeholder="如 v1 / fp8" />
+        </el-form-item>
+        <el-form-item label="架构">
+          <el-input v-model="prequantizedForm.architecture" placeholder="qwen2 / llama / ..." />
+        </el-form-item>
+        <el-form-item label="上下文长度">
+          <el-input-number v-model="prequantizedForm.context_len" :min="0" :step="1024" />
+        </el-form-item>
+        <el-form-item label="存储路径" required>
+          <div class="path-picker">
+            <el-input :model-value="prequantizedForm.storage_path" readonly placeholder="选择模型目录" />
+            <el-button @click="fsVisible = true; fsAllowDir = true">选择</el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="prequantizedVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submitPrequantized">确定</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 新增版本 -->
     <el-dialog v-model="versionVisible" title="新增版本" width="560px">
       <el-form :model="versionForm" label-width="110px">
@@ -270,6 +316,9 @@ const inspectResult = ref(null)
 const manualVisible = ref(false)
 const manualForm = reactive({ name: '', params_b: 7, architecture: '', dtype: 'bf16', format: 'safetensors', context_len: 32768, base_storage_path: '' })
 
+const prequantizedVisible = ref(false)
+const prequantizedForm = reactive({ name: '', params_b: 7, architecture: '', dtype: 'bf16', format: 'safetensors', quantization: 'fp8', version: 'v1', context_len: 32768, storage_path: '' })
+
 const versionVisible = ref(false)
 const versionForm = reactive({ version: '', quantization: 'none', dtype: 'bf16', storage_path: '' })
 let currentModelId = null
@@ -317,12 +366,33 @@ function openManual() {
   manualVisible.value = true
 }
 
+function openPrequantized() {
+  Object.assign(prequantizedForm, { name: '', params_b: 7, architecture: '', dtype: 'bf16', format: 'safetensors', quantization: 'fp8', version: 'v1', context_len: 32768, storage_path: '' })
+  prequantizedVisible.value = true
+}
+
+async function submitPrequantized() {
+  saving.value = true
+  try {
+    await modelsApi.prequantized({ ...prequantizedForm })
+    ElMessage.success('预量化模型已导入')
+    prequantizedVisible.value = false
+    await load()
+  } catch (e) {
+    ElMessage.error(e.message)
+  } finally {
+    saving.value = false
+  }
+}
+
 async function onFsSelect(path) {
   if (importVisible.value) {
     importForm.path = path
     await inspect(path)
   } else if (manualVisible.value) {
     manualForm.base_storage_path = path
+  } else if (prequantizedVisible.value) {
+    prequantizedForm.storage_path = path
   }
   fsAllowDir.value = false
 }

@@ -13,11 +13,19 @@ Web 化的大语言模型（LLM）部署与调度平台，统一管理内网多�
 - [x] 显存感知推荐引擎 v2（权重 + KV cache + 开销估算，量化/引擎/并行度感知）
 - [x] GGUF 在线量化（llama-quantize，产物自动注册为新版本）
 - [x] Agent 执行面（GPU 采集 + 注册 + 心跳 + 部署/量化指令轮询，绕过系统代理）
-- [x] Web 前端（Vue3：节点总览 / 模型仓库 / 智能推荐 / 一键部署 / 部署管理 / 模型量化）
+- [x] Web 前端（Vue3：节点总览 / 模型仓库 / 智能推荐 / 一键部署 / 部署管理 / 模型量化 / 监控告警）
 - [x] 反向推荐（按节点显卡列出可部署模型）
 - [x] HuggingFace 模型发现 + 下载（走 hf-mirror 国内镜像，进度条 + 完成后自动注册）
-- [ ] 多卡 TP / 多机负载均衡（P1）
-- [ ] 预量化导入 + Docker 编排（P2）
+- [x] 调度器：按显存需求 + GPU 空闲度自动选节点（支持指定节点，GGUF 解析结果进程内缓存）
+- [x] 部署生命周期：停止 / 重启（`stopping → stopped → pending` 状态机 + `DeployTask` 意图）
+- [x] 网关负载均衡：OpenAI 兼容 `/v1/*` 按模型名分发到多副本（轮询 + 失败冷却 + SSE 透传）
+- [x] 副本扩缩：`scale` 一键增减同模型版本的运行实例数
+- [x] 预量化导入：FP8 / AWQ / GPTQ 等已量化模型登记
+- [x] Docker 编排：部署指定 `container_image` 后 Agent 走 `docker run`（否则裸金属 subprocess）
+- [x] 跨机 TP 门控：Agent 检测 NVLink/IB 互联，调度器在无 RDMA 时拦截跨机张量并行
+- [ ] 跨机张量并行 TP 多节点编排（Ray 集群，需 IB/RDMA 硬件）（P3）
+- [x] 监控聚合 + 告警（心跳丢失/显存过高/温度过高/利用率低/部署 OOM，`open→resolved` 生命周期 + 去重）
+- [ ] 认证鉴权 RBAC（P2）
 
 ## 目录结构
 
@@ -156,6 +164,7 @@ git push -u origin main
 | GET | `/api/servers/{id}/gpus` | 节点 GPU 清单 |
 | GET/POST | `/api/models` | 模型仓库 |
 | POST | `/api/models/import` | 导入 GGUF（自动解析元数据） |
+| POST | `/api/models/prequantized` | 预量化导入（FP8/AWQ/GPTQ，显式登记元数据） |
 | POST | `/api/models/{id}/versions` | 新增版本 |
 | GET | `/api/fs/roots` | 文件浏览器白名单根目录 |
 | GET | `/api/fs/list?path=` | 目录列表 |
@@ -163,8 +172,17 @@ git push -u origin main
 | POST | `/api/recommend` | 通用推荐（显式参数） |
 | POST | `/api/recommend/plan` | 推荐（按版本 + 节点，服务端解析） |
 | GET | `/api/recommend/models?server_id=` | 反向推荐（按节点显卡列出可部署模型） |
-| POST | `/api/deployments` | 创建部署 |
+| POST | `/api/deployments` | 创建部署（`server_id`/`engine` 可省略，自动选节点并按格式解析引擎） |
+| POST | `/api/deployments/place` | 放置预览：返回按分数降序的候选节点 |
 | GET | `/api/deployments/pending` | Agent 拉取待部署任务 |
+| GET | `/api/deployments/stopping` | Agent 拉取待停止的部署 |
+| POST | `/api/deployments/{id}/stop` | 停止部署（置 `stopping`，Agent 杀进程后回传 `stopped`） |
+| POST | `/api/deployments/{id}/restart` | 重启部署（`stopping`→`stopped`→自动重新 `pending` 拉起） |
+| POST | `/api/deployments/{id}/status` | Agent 回传部署状态（`running`/`failed`/`stopped` + endpoint） |
+| POST | `/api/deployments/{id}/scale` | 副本扩缩（调整同 model_version+engine 的实例数） |
+| GET | `/v1/models` | 网关：列出可对外服务的模型 |
+| POST | `/v1/chat/completions` | 网关：OpenAI 兼容对话（按 `model` 分发 + SSE 透传） |
+| POST | `/v1/completions` | 网关：OpenAI 兼容补全 |
 | POST | `/api/quantize` | 创建量化任务 |
 | GET | `/api/quantize/pending` | Agent 拉取待量化任务 |
 | GET | `/api/hf/search?query=` | 搜索 HuggingFace 模型（hf-mirror） |
@@ -173,4 +191,46 @@ git push -u origin main
 | GET | `/api/hf/models/{repo_id}/files` | 仓库文件列表 |
 | POST | `/api/hf/download` | 创建 HF 下载任务 |
 | GET | `/api/hf/downloads` | 下载任务列表（含进度） |
+| GET | `/api/monitor/overview` | 监控总览（节点/GPU/显存/运行实例/告警统计） |
+| GET | `/api/monitor/alerts?open_only=` | 告警列表（支持只看未处理） |
+| POST | `/api/monitor/alerts/{id}/ack` | 确认/处理告警（置 `resolved`） |
 | GET | `/api/engines` | 引擎能力矩阵 |
+
+### 部署生命周期
+
+部署状态机：`pending → running/failed → stopping → stopped`，重启在 `stopped` 后自动回到 `pending` 重新拉起。
+
+- **创建**：`POST /api/deployments` 落库为 `pending`，Agent 轮询 `/pending` 拉起进程，健康检查通过后回传 `running`（含 endpoint）。
+- **停止**：`POST /api/deployments/{id}/stop` 置 `stopping`，Agent 杀进程后回传 `stopped`。
+- **重启**：`POST /api/deployments/{id}/restart` 复用 `stopping → stopped` 流程，Master 收到 `stopped` 后自动重新置 `pending` 并新增 deploy 任务（`pending`/`stopping` 状态下重启返回 409）。
+- 停止/重启意图用 `DeployTask`（`action=stop/restart`）落库，Agent 无需感知重启差异。
+
+### 网关与副本
+
+- **服务 = 模型名**：网关把「同一模型名的所有 `running` 实例」视为后端池，对外暴露 OpenAI 兼容接口（`/v1/chat/completions`、`/v1/completions`、`/v1/models`），客户端传 `model` 字段即路由到对应池。
+- **分发策略**：轮询（round-robin）；代理失败的后端进入 10s 冷却，冷却期内不参与分发，避免打到不健康实例。
+- **副本扩缩**：`POST /api/deployments/{id}/scale` 传 `{replicas: N}`，将「同 model_version + engine」的实例数调整到 N（增则自动放置并克隆端口，减则停止最新副本）。配合网关即可对单模型做多副本水平扩展。
+
+### 部署形态（裸金属 / Docker）
+
+部署创建时可传 `container_image`（或通过 `VLLM_CONTAINER_IMAGE` / `LLAMA_CPP_CONTAINER_IMAGE` 环境变量设置默认值）：
+
+- **裸金属**（默认）：Agent 在本机 subprocess 启动引擎（`resolve_command` 解析 `{LLAMA_CPP_BIN}` 占位符）。
+- **Docker**：Agent 执行 `docker run -d --gpus all -p {port}:{port} -e K=V ... {image} {command}`，引擎命令原样透传为容器 CMD。模型存储需由镜像/挂载保证容器内可见（NFS）。
+
+### 跨机张量并行（IB/RDMA）
+
+- Agent 采集时自动检测互联类型（`pcie` / `nvlink` / `ib`），写入 `Server.interconnect`。
+- 调度器在 `tp_size` 超过单节点 GPU 数、且集群无 `ib`/`nvlink` 互联节点时，返回明确错误提示降级（降并行度或量化），避免在无 RDMA 下强行跨机 TP。
+- 多节点 Ray 编排（`--worker-use-ray` + RAY_ADDRESS 启动脚手架已预留）需 IB/RDMA 硬件，列为 P3。
+
+### HuggingFace 模型发现与下载
+
+- 模型仓库页内置「HuggingFace」标签，支持关键词搜索与 GGUF 组织（`bartowski` / `TheBloke` / `ggml-org` / `lmstudio-community`）快捷浏览。
+- 下载走国内镜像 `hf-mirror.com`，Master 直连镜像（`trust_env=False`，绕过本机失效代理），后台线程流式下载 + 进度回写；完成后 GGUF 自动解析并注册为模型版本。
+- 环境变量：`HF_ENDPOINT`（默认 `https://hf-mirror.com`）、`HF_TOKEN`（可选，gated 模型）、`HF_DOWNLOAD_DIR`（默认与 `MODEL_STORAGE_BASE` 一致）。
+
+### 监控告警
+
+- Master 后台线程按 `ALERT_POLL_INTERVAL` 周期评估告警规则（心跳丢失 / 显存过高 / 温度过高 / 利用率低 / 部署 OOM 与失败），以 `dedup_key` 去重，条件解除后自动 `resolved`。
+- 阈值环境变量：`HEARTBEAT_TIMEOUT`（默认 30s）、`VRAM_ALERT_PCT`（95）、`TEMP_ALERT_C`（85）、`GPU_IDLE_PCT`（5）。

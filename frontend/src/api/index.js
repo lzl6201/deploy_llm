@@ -24,6 +24,7 @@ export const modelsApi = {
   list: () => http.get('/api/models'),
   create: (data) => http.post('/api/models', data),
   import: (data) => http.post('/api/models/import', data),
+  prequantized: (data) => http.post('/api/models/prequantized', data),
   addVersion: (id, data) => http.post(`/api/models/${id}/versions`, data),
 }
 
@@ -47,6 +48,8 @@ export const deploymentsApi = {
   list: () => http.get('/api/deployments'),
   create: (data) => http.post('/api/deployments', data),
   stop: (id) => http.post(`/api/deployments/${id}/stop`),
+  restart: (id) => http.post(`/api/deployments/${id}/restart`),
+  scale: (id, replicas) => http.post(`/api/deployments/${id}/scale`, { replicas }),
 }
 
 export const quantizeApi = {
@@ -62,4 +65,10 @@ export const hfApi = {
   download: (data) => http.post('/api/hf/download', data),
   downloads: () => http.get('/api/hf/downloads'),
   downloadDetail: (id) => http.get(`/api/hf/downloads/${id}`),
+}
+
+export const monitorApi = {
+  overview: () => http.get('/api/monitor/overview'),
+  alerts: (openOnly = false) => http.get('/api/monitor/alerts', { params: { open_only: openOnly } }),
+  ack: (id) => http.post(`/api/monitor/alerts/${id}/ack`),
 }

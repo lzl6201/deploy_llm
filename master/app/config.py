@@ -38,6 +38,29 @@ class Settings:
     ollama_host: str = field(
         default_factory=lambda: os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
     )
+    # Docker 编排：各引擎默认容器镜像（非空则 Agent 用 docker run 而非裸金属 subprocess）
+    vllm_container_image: str = field(
+        default_factory=lambda: os.getenv("VLLM_CONTAINER_IMAGE", "")
+    )
+    llama_cpp_container_image: str = field(
+        default_factory=lambda: os.getenv("LLAMA_CPP_CONTAINER_IMAGE", "")
+    )
+    # 监控告警阈值与轮询
+    heartbeat_timeout: int = field(
+        default_factory=lambda: int(os.getenv("HEARTBEAT_TIMEOUT", "30"))
+    )  # 节点心跳丢失判定阈值（秒）
+    alert_poll_interval: int = field(
+        default_factory=lambda: int(os.getenv("ALERT_POLL_INTERVAL", "15"))
+    )
+    vram_alert_pct: float = field(
+        default_factory=lambda: float(os.getenv("VRAM_ALERT_PCT", "95"))
+    )
+    temp_alert_c: float = field(
+        default_factory=lambda: float(os.getenv("TEMP_ALERT_C", "85"))
+    )
+    gpu_idle_pct: float = field(
+        default_factory=lambda: float(os.getenv("GPU_IDLE_PCT", "5"))
+    )
     # HuggingFace Hub 镜像端点（国内默认走 hf-mirror.com）
     hf_endpoint: str = field(
         default_factory=lambda: os.getenv("HF_ENDPOINT", "https://hf-mirror.com")

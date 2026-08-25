@@ -9,7 +9,7 @@ from app.schemas.recommend import (
     RecommendResponse,
     ServerModelRecommendOut,
 )
-from app.services.gguf import GGUFError, parse_gguf
+from app.services.model_meta import model_version_input
 from app.services.recommend_engine import RecommendInput, RecommendResult, recommend
 
 router = APIRouter(prefix="/api/recommend", tags=["recommend"])
@@ -36,52 +36,12 @@ def _gpu_list_for(db: Session, server_id: int) -> list[dict]:
     return [{"vram_total_mb": g.vram_total_mb} for g in gpus]
 
 
-def _gguf_meta(mv: ModelVersion) -> dict:
-    """解析 GGUF KV 结构，供精确 KV cache 估算；失败时退化。"""
-    meta = {
-        "block_count": 0,
-        "head_count_kv": 0,
-        "key_length": 0,
-        "embedding_length": 0,
-        "file_size_mb": mv.file_size_mb or 0,
-    }
-    if mv.format == "gguf":
-        try:
-            info = parse_gguf(mv.storage_path)
-            meta = {
-                "block_count": info.block_count,
-                "head_count_kv": info.head_count_kv,
-                "key_length": info.key_length,
-                "embedding_length": info.embedding_length,
-                "file_size_mb": int(info.file_size_bytes // (1024 * 1024)),
-            }
-        except GGUFError:
-            pass
-    return meta
-
-
 def _plan_for_version(
     db: Session, mv: ModelVersion, server_id: int, max_context_len: int | None = None
 ) -> RecommendResult:
     """为单个模型版本 + 目标节点计算部署方案。"""
-    model = mv.model
-    ctx_len = max_context_len or model.context_len or 4096
-    meta = _gguf_meta(mv)
-    gpu_list = _gpu_list_for(db, server_id)
     return recommend(
-        RecommendInput(
-            params_b=model.params_b,
-            dtype=mv.dtype or model.dtype,
-            context_len=ctx_len,
-            quantization=mv.quantization,
-            format=mv.format,
-            file_size_mb=meta["file_size_mb"],
-            gpus=gpu_list,
-            block_count=meta["block_count"],
-            head_count_kv=meta["head_count_kv"],
-            key_length=meta["key_length"],
-            embedding_length=meta["embedding_length"],
-        )
+        model_version_input(mv, max_context_len, _gpu_list_for(db, server_id))
     )
 
 

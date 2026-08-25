@@ -35,6 +35,22 @@ class ModelVersionCreate(BaseModel):
     file_size_mb: int = 0
 
 
+class PrequantizedImportRequest(BaseModel):
+    """导入已量化模型（FP8 / AWQ / GPTQ 等非 GGUF），显式登记元数据。"""
+
+    name: str
+    params_b: float
+    storage_path: str
+    quantization: str = "none"  # fp8 / awq / gptq / ...
+    dtype: str = "bf16"
+    version: str = "v1"
+    format: str = "safetensors"
+    architecture: str = ""
+    context_len: int = 4096
+    size_gb: Optional[float] = None
+    source: str = "local"
+
+
 class ModelVersionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

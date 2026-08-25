@@ -27,6 +27,10 @@
           <el-icon><Filter /></el-icon>
           <span>模型量化</span>
         </el-menu-item>
+        <el-menu-item index="/monitor">
+          <el-icon><Bell /></el-icon>
+          <span>监控告警</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 

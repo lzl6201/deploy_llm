@@ -57,3 +57,60 @@ def register_gguf(
     db.commit()
     db.refresh(model)
     return model
+
+
+def register_prequantized(
+    db: Session,
+    name: str,
+    params_b: float,
+    storage_path: str,
+    quantization: str = "none",
+    dtype: str = "bf16",
+    version: str = "v1",
+    format: str = "safetensors",
+    architecture: str = "",
+    context_len: int = 4096,
+    size_gb: float | None = None,
+    source: str = "local",
+) -> Model:
+    """登记已量化模型（FP8/AWQ/GPTQ 等）。同名模型追加版本。"""
+    model = db.query(Model).filter(Model.name == name).first()
+    if model is None:
+        model = Model(
+            name=name,
+            params_b=params_b,
+            architecture=architecture,
+            dtype=dtype,
+            format=format,
+            context_len=context_len,
+            base_storage_path=storage_path,
+            source=source,
+        )
+        db.add(model)
+        db.flush()
+
+    exists = (
+        db.query(ModelVersion)
+        .filter(
+            ModelVersion.model_id == model.id,
+            ModelVersion.storage_path == storage_path,
+        )
+        .first()
+    )
+    if exists is None:
+        db.add(
+            ModelVersion(
+                model_id=model.id,
+                version=version,
+                quantization=quantization,
+                dtype=dtype,
+                format=format,
+                architecture=architecture,
+                storage_path=storage_path,
+                size_gb=size_gb,
+            )
+        )
+
+    db.commit()
+    db.refresh(model)
+    return model

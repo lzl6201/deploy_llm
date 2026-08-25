@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -23,6 +24,11 @@ try:
     HAS_GGUF = True
 except Exception:  # pragma: no cover - gguf 未安装时降级
     HAS_GGUF = False
+
+# GGUF 解析结果缓存（模型文件不可变，以路径 + mtime + 大小作键）。
+# 大模型（数十 GB）每次解析约需数秒，推荐/调度高频调用需缓存避免重复读取。
+_CACHE_TTL = 300
+_parse_cache: dict[str, tuple[float, GGUFinfo]] = {}
 
 
 class GGUFError(Exception):
@@ -157,12 +163,26 @@ def _estimate_params_from_size(file_size_bytes: int, file_type: int) -> float:
     return (weight_bytes * 8 / bits) / 1e9
 
 
+def _cache_key(path: str) -> str | None:
+    try:
+        st = os.stat(path)
+        return f"{os.path.abspath(path)}:{st.st_mtime_ns}:{st.st_size}"
+    except OSError:
+        return None
+
+
 def parse_gguf(path: str) -> GGUFinfo:
-    """解析单个 .gguf 文件，返回 :class:`GGUFinfo`。"""
+    """解析单个 .gguf 文件，返回 :class:`GGUFinfo`（带进程内缓存）。"""
     if not HAS_GGUF:
         raise GGUFError("gguf 包未安装，无法解析 GGUF 元数据")
     if not os.path.isfile(path):
         raise GGUFError(f"文件不存在: {path}")
+
+    key = _cache_key(path)
+    if key is not None:
+        hit = _parse_cache.get(key)
+        if hit is not None and time.time() - hit[0] < _CACHE_TTL:
+            return hit[1]
 
     try:
         reader = GGUFReader(path)
@@ -201,7 +221,7 @@ def parse_gguf(path: str) -> GGUFinfo:
     file_size_bytes = os.path.getsize(path)
     params_b, params_source = _resolve_params(reader, name, file_type, meta, file_size_bytes)
 
-    return GGUFinfo(
+    info = GGUFinfo(
         path=os.path.abspath(path),
         file_size_bytes=file_size_bytes,
         architecture=arch,
@@ -220,6 +240,9 @@ def parse_gguf(path: str) -> GGUFinfo:
         vocab_size=meta["vocab_size"],
         tensor_count=len(reader.tensors),
     )
+    if key is not None:
+        _parse_cache[key] = (time.time(), info)
+    return info
 
 
 def _vocab_size(reader: GGUFReader) -> int:

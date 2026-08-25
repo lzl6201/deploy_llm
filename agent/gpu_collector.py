@@ -1,3 +1,4 @@
+import os
 import socket
 import subprocess
 from typing import Any
@@ -25,19 +26,53 @@ def get_ip() -> str:
         s.close()
 
 
+def _has_nvlink() -> bool:
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "nvlink", "--status", "--csv"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+        return "active" in out.lower() and "link" in out.lower()
+    except Exception:
+        return False
+
+
+def _has_infiniband() -> bool:
+    if os.name != "nt" and os.path.isdir("/sys/class/infiniband"):
+        return True
+    try:
+        out = subprocess.check_output(
+            ["ip", "link"], text=True, stderr=subprocess.DEVNULL
+        )
+        return "ib0" in out.lower() or ": ib" in out.lower()
+    except Exception:
+        return False
+
+
+def _detect_interconnect(gpu_count: int) -> str:
+    """互联类型：pcie / nvlink / ib（跨机 TP 仅允许后两者）。"""
+    if gpu_count > 1 and _has_nvlink():
+        return "nvlink"
+    if _has_infiniband():
+        return "ib"
+    return "pcie"
+
+
 def collect_node_info() -> dict[str, Any]:
     info: dict[str, Any] = {
         "hostname": get_hostname(),
         "ip": get_ip(),
         "driver": "",
         "cuda": "",
-        "interconnect": "pcie",  # P3 阶段检测 NVLink / InfiniBand
+        "interconnect": "pcie",
         "gpus": [],
     }
     if HAS_PYNVML:
         _collect_pynvml(info)
     else:
         info["gpus"] = _collect_nvidia_smi()
+    info["interconnect"] = _detect_interconnect(len(info["gpus"]))
     return info
 
 

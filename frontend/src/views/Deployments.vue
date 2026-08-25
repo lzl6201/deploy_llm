@@ -21,8 +21,14 @@
           </template>
         </el-table-column>
         <el-table-column prop="endpoint" label="访问地址" min-width="200" show-overflow-tooltip />
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
+            <el-button v-if="row.status === 'running'" size="small" text type="primary" @click="scale(row)">
+              扩缩
+            </el-button>
+            <el-button v-if="row.status === 'running'" size="small" text @click="restart(row)">
+              重启
+            </el-button>
             <el-button
               v-if="row.status === 'running'"
               type="danger"
@@ -77,6 +83,43 @@ async function stop(row) {
   try {
     await deploymentsApi.stop(row.id)
     ElMessage.success('已发送停止指令')
+    await load()
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
+}
+
+async function restart(row) {
+  try {
+    await ElMessageBox.confirm(`确认重启部署「${row.name}」？`, '提示', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await deploymentsApi.restart(row.id)
+    ElMessage.success('已发送重启指令')
+    await load()
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
+}
+
+async function scale(row) {
+  let value
+  try {
+    const { value: v } = await ElMessageBox.prompt(
+      '输入目标副本数（同一模型版本的运行实例数，至少为 1）',
+      `扩缩副本「${row.name}」`,
+      { inputValue: '1', inputPattern: /^[1-9]\d*$/, inputErrorMessage: '请输入正整数' }
+    )
+    value = v
+  } catch {
+    return
+  }
+  try {
+    const resp = await deploymentsApi.scale(row.id, Number(value))
+    const { replicas, created, stopped } = resp.data
+    ElMessage.success(`副本数已调整为 ${replicas}（新建 ${created.length}，停止 ${stopped.length}）`)
     await load()
   } catch (e) {
     ElMessage.error(e.message)

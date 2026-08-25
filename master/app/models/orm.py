@@ -107,8 +107,10 @@ class Deployment(Base):
     max_model_len = Column(Integer, default=4096)
     port = Column(Integer, default=8000)
     extra = Column(JSON, default=dict)
+    container_image = Column(String(255))  # 非空则 Agent 走 Docker 编排，否则裸金属
     status = Column(String(32), default="pending")
     endpoint = Column(String(255))
+    last_error = Column(Text)  # 最近一次失败原因（用于 OOM 等告警）
     created_at = Column(DateTime, default=datetime.utcnow)
 
     server = relationship("Server", back_populates="deployments")
@@ -165,3 +167,17 @@ class User(Base):
     username = Column(String(64), unique=True, index=True)
     password_hash = Column(String(255))
     role = Column(String(32), default="viewer")  # admin / operator / viewer
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    server_id = Column(Integer, nullable=True)  # 关联节点；全局告警可为空
+    dedup_key = Column(String(128), index=True)  # 去重键，如 "gpu_vram_high:1:0"
+    type = Column(String(64))  # heartbeat_lost / gpu_vram_high / gpu_temp_high / deploy_oom / gpu_idle
+    severity = Column(String(16), default="warning")  # critical / warning / info
+    message = Column(Text)
+    status = Column(String(16), default="open")  # open / resolved
+    created_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)

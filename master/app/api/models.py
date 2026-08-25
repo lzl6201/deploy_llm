@@ -9,10 +9,11 @@ from app.schemas.model import (
     ModelOut,
     ModelVersionCreate,
     ModelVersionOut,
+    PrequantizedImportRequest,
 )
 from app.services import fs
 from app.services.gguf import GGUFError
-from app.services.model_registry import register_gguf
+from app.services.model_registry import register_gguf, register_prequantized
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -43,6 +44,29 @@ def import_model(payload: ModelImportRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail=str(exc))
     except GGUFError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.post("/prequantized", response_model=ModelOut)
+def import_prequantized(payload: PrequantizedImportRequest, db: Session = Depends(get_db)):
+    """导入已量化模型（FP8/AWQ/GPTQ 等）：显式登记元数据，同名则追加版本。"""
+    try:
+        fs._assert_allowed(payload.storage_path)
+    except fs.FSPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    return register_prequantized(
+        db,
+        name=payload.name,
+        params_b=payload.params_b,
+        storage_path=payload.storage_path,
+        quantization=payload.quantization,
+        dtype=payload.dtype,
+        version=payload.version,
+        format=payload.format,
+        architecture=payload.architecture,
+        context_len=payload.context_len,
+        size_gb=payload.size_gb,
+        source=payload.source,
+    )
 
 
 @router.get("/{model_id}", response_model=ModelOut)

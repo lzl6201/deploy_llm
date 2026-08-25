@@ -57,7 +57,13 @@ async def process_pending(
         lc = dep["launch_config"]
         logger.info("launching deployment %s (engine=%s)", dep_id, dep["engine"])
         try:
-            runner.launch(dep_id, lc["command"], lc["env"])
+            runner.launch(
+                dep_id,
+                lc["command"],
+                lc["env"],
+                lc.get("container_image") or "",
+                lc.get("port") or 0,
+            )
             url = f"http://127.0.0.1:{lc['port']}{lc['health_check_path']}"
             healthy = await _wait_healthy(http, url, settings.health_timeout)
             if healthy:
@@ -78,6 +84,25 @@ async def process_pending(
                 f"{settings.master_url}/api/deployments/{dep_id}/status",
                 json={"status": "failed", "detail": str(e)},
             )
+
+
+async def process_stopping(
+    http: httpx.AsyncClient, server_id: int, runner: EngineRunner
+) -> None:
+    """拉取待停止的部署（status=stopping），杀进程后回传 stopped。"""
+    resp = await http.get(
+        f"{settings.master_url}/api/deployments/stopping",
+        params={"server_id": server_id},
+    )
+    resp.raise_for_status()
+    for dep in resp.json():
+        dep_id = dep["id"]
+        logger.info("stopping deployment %s", dep_id)
+        runner.stop(dep_id)
+        await http.post(
+            f"{settings.master_url}/api/deployments/{dep_id}/status",
+            json={"status": "stopped"},
+        )
 
 
 async def process_pending_quantize(http: httpx.AsyncClient, server_id: int) -> None:
@@ -150,6 +175,11 @@ async def main() -> None:
                 await process_pending(http, server_id, runner)
             except Exception as e:
                 logger.warning("pending poll failed: %s", e)
+
+            try:
+                await process_stopping(http, server_id, runner)
+            except Exception as e:
+                logger.warning("stopping poll failed: %s", e)
 
             try:
                 await process_pending_quantize(http, server_id)

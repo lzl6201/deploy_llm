@@ -11,7 +11,7 @@ import os
 import threading
 
 from app.db.session import SessionLocal
-from app.models.orm import DownloadJob
+from app.models.orm import DownloadJob, ModelVersion
 from app.services.huggingface import download_to_file
 from app.services.model_registry import register_gguf
 
@@ -72,7 +72,15 @@ def _finish_done(job_id: int, dest_path: str, downloaded: int) -> None:
         db = SessionLocal()
         try:
             model = register_gguf(db, dest_path, version="v1", source="huggingface")
-            model_version_id = model.id
+            mv = (
+                db.query(ModelVersion)
+                .filter(
+                    ModelVersion.model_id == model.id,
+                    ModelVersion.storage_path == os.path.abspath(dest_path),
+                )
+                .first()
+            )
+            model_version_id = mv.id if mv else None
         except Exception as exc:  # noqa: BLE001 - 注册失败不阻断下载完成态
             err = f"下载完成，但 GGUF 注册失败: {exc}"
         finally:

@@ -41,4 +41,5 @@ class LlamaCppAdapter(EngineAdapter):
             env=env,
             port=req.port,
             health_check_path="/health",
+            container_image=req.container_image or None,
         )

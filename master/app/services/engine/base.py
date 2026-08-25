@@ -14,6 +14,7 @@ class DeployRequest:
     max_model_len: int = 4096
     port: int = 8000
     extra: dict = field(default_factory=dict)
+    container_image: str = ""  # 非空则 Agent 走 Docker 编排
 
 
 @dataclass

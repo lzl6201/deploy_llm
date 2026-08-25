@@ -27,6 +27,8 @@ _NEW_COLUMNS: dict[str, dict[str, str]] = {
     "deployments": {
         "format": "VARCHAR(32) DEFAULT 'safetensors'",
         "extra": "TEXT DEFAULT '{}'",
+        "container_image": "VARCHAR(255)",
+        "last_error": "TEXT",
     },
     "servers": {
         "source": "VARCHAR(32) DEFAULT 'agent'",
