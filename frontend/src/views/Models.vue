@@ -296,7 +296,7 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { fsApi, hfApi, modelsApi } from '../api'
 import FsBrowser from '../components/FsBrowser.vue'
@@ -580,11 +580,17 @@ function progressStatus(s) {
   return s === 'done' ? 'success' : s === 'failed' ? 'exception' : ''
 }
 
-onMounted(() => {
+onMounted(loadOrgs)
+
+onActivated(() => {
   load()
-  loadOrgs()
+  if (downloadsVisible.value) {
+    startDownloadPolling()
+    loadDownloads()
+  }
 })
 
+onDeactivated(stopDownloadPolling)
 onBeforeUnmount(stopDownloadPolling)
 </script>
 
@@ -597,7 +603,8 @@ onBeforeUnmount(stopDownloadPolling)
 }
 .title {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text);
 }
 .version-panel {
   padding: 8px 24px;
@@ -617,7 +624,7 @@ onBeforeUnmount(stopDownloadPolling)
   flex: 1;
 }
 .hint {
-  color: #909399;
+  color: var(--text-3);
   font-size: 13px;
 }
 .hf-search {
@@ -630,7 +637,7 @@ onBeforeUnmount(stopDownloadPolling)
 }
 .hf-orgs {
   margin-bottom: 12px;
-  color: #606266;
+  color: var(--text-3);
   font-size: 13px;
 }
 .hf-orgs-label {

@@ -13,6 +13,7 @@ from app.schemas.server import (
     ServerRegister,
 )
 from app.services import node_manager
+from app.services.auth import require_roles
 from app.services.node_manager import NodeError
 
 router = APIRouter(prefix="/api/servers", tags=["servers"])
@@ -31,7 +32,7 @@ def register(payload: ServerRegister, db: Session = Depends(get_db)):
     return {"id": server.id, "status": server.status}
 
 
-@router.post("/manual", response_model=ServerOut)
+@router.post("/manual", response_model=ServerOut, dependencies=[Depends(require_roles("admin", "operator"))])
 def create_manual(payload: ManualNodeCreate, db: Session = Depends(get_db)):
     """手动登记节点（未接 Agent，供规划/预登记）。"""
     try:
@@ -63,7 +64,7 @@ def get_server(server_id: int, db: Session = Depends(get_db)):
     return server
 
 
-@router.put("/{server_id}", response_model=ServerOut)
+@router.put("/{server_id}", response_model=ServerOut, dependencies=[Depends(require_roles("admin", "operator"))])
 def update_server(server_id: int, payload: NodeUpdate, db: Session = Depends(get_db)):
     try:
         return node_manager.update_node(db, server_id, payload)
@@ -71,7 +72,7 @@ def update_server(server_id: int, payload: NodeUpdate, db: Session = Depends(get
         raise HTTPException(status_code=409, detail=str(exc))
 
 
-@router.delete("/{server_id}")
+@router.delete("/{server_id}", dependencies=[Depends(require_roles("admin", "operator"))])
 def delete_server(server_id: int, db: Session = Depends(get_db)):
     try:
         node_manager.delete_node(db, server_id)

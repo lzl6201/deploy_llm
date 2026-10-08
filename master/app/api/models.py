@@ -12,6 +12,7 @@ from app.schemas.model import (
     PrequantizedImportRequest,
 )
 from app.services import fs
+from app.services.auth import require_roles
 from app.services.gguf import GGUFError
 from app.services.model_registry import register_gguf, register_prequantized
 
@@ -23,7 +24,7 @@ def list_models(db: Session = Depends(get_db)):
     return db.query(Model).order_by(Model.id).all()
 
 
-@router.post("", response_model=ModelOut)
+@router.post("", response_model=ModelOut, dependencies=[Depends(require_roles("admin", "operator"))])
 def create_model(payload: ModelCreate, db: Session = Depends(get_db)):
     model = Model(**payload.model_dump())
     db.add(model)
@@ -32,7 +33,7 @@ def create_model(payload: ModelCreate, db: Session = Depends(get_db)):
     return model
 
 
-@router.post("/import", response_model=ModelOut)
+@router.post("/import", response_model=ModelOut, dependencies=[Depends(require_roles("admin", "operator"))])
 def import_model(payload: ModelImportRequest, db: Session = Depends(get_db)):
     """导入 GGUF 文件：解析元数据后自动建模型 + 首个版本（同名则追加版本）。"""
     try:
@@ -46,7 +47,7 @@ def import_model(payload: ModelImportRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=422, detail=str(exc))
 
 
-@router.post("/prequantized", response_model=ModelOut)
+@router.post("/prequantized", response_model=ModelOut, dependencies=[Depends(require_roles("admin", "operator"))])
 def import_prequantized(payload: PrequantizedImportRequest, db: Session = Depends(get_db)):
     """导入已量化模型（FP8/AWQ/GPTQ 等）：显式登记元数据，同名则追加版本。"""
     try:
@@ -77,7 +78,7 @@ def get_model(model_id: int, db: Session = Depends(get_db)):
     return model
 
 
-@router.post("/{model_id}/versions", response_model=ModelVersionOut)
+@router.post("/{model_id}/versions", response_model=ModelVersionOut, dependencies=[Depends(require_roles("admin", "operator"))])
 def add_version(model_id: int, payload: ModelVersionCreate, db: Session = Depends(get_db)):
     model = db.get(Model, model_id)
     if model is None:

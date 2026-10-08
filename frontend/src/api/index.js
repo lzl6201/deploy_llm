@@ -1,15 +1,40 @@
 import axios from 'axios'
+import { clearAuth, getToken } from '../auth'
 
 const http = axios.create({ timeout: 30000 })
+
+http.interceptors.request.use((config) => {
+  const token = getToken()
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
 
 http.interceptors.response.use(
   (resp) => resp,
   (err) => {
+    const status = err.response?.status
+    if (status === 401) {
+      const url = err.config?.url || ''
+      if (url !== '/api/auth/login') {
+        clearAuth()
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login'
+        }
+      }
+    }
     const detail = err.response?.data?.detail
     const msg = typeof detail === 'string' ? detail : err.message || '请求失败'
     return Promise.reject(new Error(msg))
   }
 )
+
+export const authApi = {
+  login: (data) => http.post('/api/auth/login', data),
+  me: () => http.get('/api/auth/me'),
+  users: () => http.get('/api/auth/users'),
+  createUser: (data) => http.post('/api/auth/users', data),
+  removeUser: (id) => http.delete(`/api/auth/users/${id}`),
+}
 
 export const serversApi = {
   list: () => http.get('/api/servers'),

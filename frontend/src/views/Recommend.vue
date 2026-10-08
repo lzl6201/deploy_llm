@@ -253,7 +253,8 @@ onMounted(async () => {
 <style scoped>
 .title {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text);
 }
 .card-header {
   display: flex;
@@ -266,7 +267,7 @@ onMounted(async () => {
 }
 .summary {
   margin-bottom: 12px;
-  color: #606266;
+  color: var(--text-2);
   font-size: 13px;
 }
 .summary .el-tag {
@@ -276,7 +277,7 @@ onMounted(async () => {
   width: 100%;
 }
 .hint {
-  color: #909399;
+  color: var(--text-3);
   font-size: 13px;
 }
 .gpu-tag {
@@ -291,17 +292,20 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   padding: 12px 4px;
-  background: #f5f7fa;
-  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
 .metric .num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 20px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text);
 }
 .metric .label {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-3);
   margin-top: 4px;
 }
 .vram-bar {
@@ -309,8 +313,8 @@ onMounted(async () => {
 }
 .bar-track {
   position: relative;
-  height: 18px;
-  background: #f0f0f0;
+  height: 16px;
+  background: var(--surface-3);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -319,19 +323,19 @@ onMounted(async () => {
   top: 0;
   left: 0;
   height: 100%;
-  background: #409eff;
+  background: var(--accent);
 }
 .bar-kv {
   position: absolute;
   top: 0;
   height: 100%;
-  background: #e6a23c;
+  background: var(--info);
 }
 .bar-legend {
   display: flex;
   gap: 16px;
   font-size: 12px;
-  color: #909399;
+  color: var(--text-3);
   margin-top: 6px;
 }
 .bar-legend .bar-cap {
@@ -346,14 +350,15 @@ onMounted(async () => {
   vertical-align: middle;
 }
 .dot-weight {
-  background: #409eff;
+  background: var(--accent);
 }
 .dot-kv {
-  background: #e6a23c;
+  background: var(--info);
 }
 .sub-title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text);
   margin: 16px 0 8px;
 }
 </style>

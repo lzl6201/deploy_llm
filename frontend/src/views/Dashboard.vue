@@ -9,29 +9,37 @@
     </div>
 
     <div class="stat-row">
-      <el-card shadow="never">
-        <div class="stat"><span class="num">{{ servers.length }}</span><span class="label">服务器</span></div>
-      </el-card>
-      <el-card shadow="never">
-        <div class="stat"><span class="num">{{ totalGpus }}</span><span class="label">GPU 总数</span></div>
-      </el-card>
-      <el-card shadow="never">
-        <div class="stat"><span class="num">{{ onlineCount }}</span><span class="label">在线节点</span></div>
-      </el-card>
-      <el-card shadow="never">
-        <div class="stat"><span class="num">{{ avgUtil.toFixed(1) }}%</span><span class="label">平均利用率</span></div>
-      </el-card>
+      <div class="telemetry">
+        <span class="t-label">服务器</span>
+        <span class="t-value mono">{{ servers.length }}</span>
+      </div>
+      <div class="telemetry">
+        <span class="t-label">GPU 总数</span>
+        <span class="t-value mono">{{ totalGpus }}</span>
+      </div>
+      <div class="telemetry">
+        <span class="t-label">在线节点</span>
+        <span class="t-value mono accent">{{ onlineCount }}</span>
+      </div>
+      <div class="telemetry">
+        <span class="t-label">平均利用率</span>
+        <span class="t-value mono">{{ avgUtil.toFixed(1) }}<span class="unit">%</span></span>
+      </div>
     </div>
 
     <el-row :gutter="16">
       <el-col v-for="srv in servers" :key="srv.id" :xs="24" :sm="12" :lg="8" class="srv-col">
-        <el-card shadow="hover" class="srv-card">
+        <el-card class="srv-card">
           <template #header>
             <div class="srv-header">
-              <span class="srv-name">{{ srv.hostname }}</span>
+              <div class="srv-id">
+                <span class="srv-name">{{ srv.hostname }}</span>
+                <span class="srv-ip mono">{{ srv.ip || '—' }}</span>
+              </div>
               <div class="srv-badges">
                 <el-tag v-if="srv.source === 'manual'" size="small" type="info">手动登记</el-tag>
-                <el-tag :type="statusType(srv.status)" size="small">{{ statusLabel(srv.status) }}</el-tag>
+                <span class="status-dot" :class="'dot-' + statusDot(srv.status)" />
+                <span class="status-text">{{ statusLabel(srv.status) }}</span>
                 <el-dropdown trigger="click" @command="(cmd) => onCommand(cmd, srv)">
                   <el-icon class="more-icon"><MoreFilled /></el-icon>
                   <template #dropdown>
@@ -44,36 +52,43 @@
               </div>
             </div>
           </template>
-          <div class="srv-meta">
-            <span>IP: {{ srv.ip || '-' }}</span>
-            <span>{{ srv.driver || '-' }} / CUDA {{ srv.cuda || '-' }}</span>
+
+          <div class="srv-meta mono">
+            <span>{{ srv.driver || '—' }}</span>
+            <span>CUDA {{ srv.cuda || '—' }}</span>
             <span>{{ interconnectLabel(srv.interconnect) }}</span>
           </div>
+
           <div v-if="srv.gpus.length === 0" class="empty">暂无 GPU</div>
           <div v-for="gpu in srv.gpus" :key="gpu.index" class="gpu-item">
             <div class="gpu-top">
               <span class="gpu-name">GPU{{ gpu.index }} · {{ gpu.name }}</span>
-              <span class="gpu-temp">{{ gpu.temperature.toFixed(0) }}°C</span>
+              <span class="gpu-temp mono" :class="'t-' + tempClass(gpu.temperature)">
+                {{ gpu.temperature.toFixed(0) }}°C
+              </span>
             </div>
-            <div class="gpu-bar">
-              <span class="bar-label">显存</span>
-              <el-progress
-                :percentage="vramPercent(gpu)"
-                :color="barColor(vramPercent(gpu))"
-                :stroke-width="10"
-                class="gpu-progress"
-              />
-              <span class="bar-val">{{ (gpu.vram_used_mb / 1024).toFixed(1) }}/{{ (gpu.vram_total_mb / 1024).toFixed(1) }}G</span>
+
+            <div class="metric-row">
+              <span class="row-label">显存</span>
+              <div class="mem-map" :class="'m-' + vramClass(vramPercent(gpu))">
+                <span
+                  v-for="i in 40"
+                  :key="i"
+                  class="mem-cell"
+                  :class="{ filled: i <= filledCells(vramPercent(gpu)) }"
+                />
+              </div>
+              <span class="row-val mono">
+                {{ (gpu.vram_used_mb / 1024).toFixed(1) }}/{{ (gpu.vram_total_mb / 1024).toFixed(1) }}G
+              </span>
             </div>
-            <div class="gpu-bar">
-              <span class="bar-label">算力</span>
-              <el-progress
-                :percentage="gpu.utilization"
-                :color="barColor(gpu.utilization)"
-                :stroke-width="10"
-                class="gpu-progress"
-              />
-              <span class="bar-val">{{ gpu.utilization.toFixed(0) }}%</span>
+
+            <div class="metric-row">
+              <span class="row-label">算力</span>
+              <div class="util-track">
+                <div class="util-fill" :class="'u-' + utilClass(gpu.utilization)" :style="{ width: gpu.utilization + '%' }" />
+              </div>
+              <span class="row-val mono">{{ gpu.utilization.toFixed(0) }}%</span>
             </div>
           </div>
         </el-card>
@@ -143,7 +158,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MoreFilled } from '@element-plus/icons-vue'
 import { serversApi } from '../api'
@@ -188,16 +203,32 @@ function vramPercent(gpu) {
   return Math.round((gpu.vram_used_mb / gpu.vram_total_mb) * 100)
 }
 
-function barColor(p) {
-  if (p < 50) return '#67c23a'
-  if (p < 80) return '#e6a23c'
-  return '#f56c6c'
+function filledCells(p) {
+  return Math.round((p / 100) * 40)
 }
 
-function statusType(status) {
-  if (status === 'online') return 'success'
-  if (status === 'degraded') return 'warning'
-  return 'info'
+function vramClass(p) {
+  if (p < 50) return 'ok'
+  if (p < 85) return 'warn'
+  return 'danger'
+}
+
+function utilClass(u) {
+  if (u < 50) return 'ok'
+  if (u < 85) return 'warn'
+  return 'danger'
+}
+
+function tempClass(t) {
+  if (t < 70) return 'ok'
+  if (t < 85) return 'warn'
+  return 'danger'
+}
+
+function statusDot(status) {
+  if (status === 'online') return 'ok'
+  if (status === 'degraded') return 'warn'
+  return 'off'
 }
 
 function statusLabel(status) {
@@ -311,14 +342,23 @@ async function removeNode(srv) {
   }
 }
 
-onMounted(() => {
+function startPolling() {
+  stopPolling()
   load()
   timer = setInterval(load, 5000)
-})
+}
 
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
+function stopPolling() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
+onMounted(startPolling)
+onActivated(startPolling)
+onDeactivated(stopPolling)
+onUnmounted(stopPolling)
 </script>
 
 <style scoped>
@@ -326,122 +366,220 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 .page-desc {
-  color: #909399;
+  color: var(--text-2);
   font-size: 13px;
 }
 .toolbar-actions {
   display: flex;
   gap: 8px;
 }
+
+/* 遥测条 */
 .stat-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 18px;
 }
-.stat {
+.telemetry {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
-.stat .num {
-  font-size: 24px;
+.t-label {
+  font-size: 12px;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+.t-value {
+  font-size: 28px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text);
+  line-height: 1;
 }
-.stat .label {
-  color: #909399;
-  font-size: 13px;
+.t-value.accent {
+  color: var(--accent-hi);
 }
+.t-value .unit {
+  font-size: 15px;
+  color: var(--text-3);
+  font-weight: 500;
+  margin-left: 2px;
+}
+
 .srv-col {
   margin-bottom: 16px;
+}
+.srv-card {
+  transition: border-color 0.2s ease;
+}
+.srv-card:hover {
+  border-color: var(--border-strong);
 }
 .srv-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 8px;
+}
+.srv-id {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .srv-name {
   font-weight: 600;
+  color: var(--text);
+}
+.srv-ip {
+  font-size: 12px;
+  color: var(--text-3);
 }
 .srv-badges {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.status-dot.dot-ok {
+  background: var(--ok);
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.8);
+}
+.status-dot.dot-warn {
+  background: var(--warn);
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.8);
+}
+.status-dot.dot-off {
+  background: var(--text-3);
+}
+.status-text {
+  font-size: 12px;
+  color: var(--text-2);
 }
 .more-icon {
   cursor: pointer;
-  color: #909399;
+  color: var(--text-3);
   outline: none;
 }
 .srv-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  color: #909399;
-  font-size: 12px;
-  margin-bottom: 12px;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 8px;
 }
 .empty {
-  color: #c0c4cc;
+  color: var(--text-3);
   text-align: center;
   padding: 12px 0;
 }
+
 .gpu-item {
-  padding: 8px 0;
-  border-top: 1px solid #f0f0f0;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
 }
 .gpu-top {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 4px;
+  align-items: baseline;
+  margin-bottom: 10px;
 }
 .gpu-name {
   font-size: 13px;
-  color: #303133;
+  color: var(--text);
+  font-weight: 500;
 }
 .gpu-temp {
   font-size: 12px;
-  color: #e6a23c;
 }
-.gpu-bar {
+.gpu-temp.t-ok { color: var(--ok); }
+.gpu-temp.t-warn { color: var(--warn); }
+.gpu-temp.t-danger { color: var(--danger); }
+
+.metric-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 10px;
+  margin-top: 8px;
 }
-.bar-label {
+.row-label {
+  font-size: 11px;
+  color: var(--text-3);
+  width: 26px;
+  flex-shrink: 0;
+}
+.row-val {
   font-size: 12px;
-  color: #909399;
-  width: 28px;
-}
-.gpu-progress {
-  flex: 1;
-}
-.bar-val {
-  font-size: 12px;
-  color: #606266;
-  width: 80px;
+  color: var(--text-2);
+  width: 108px;
   text-align: right;
+  flex-shrink: 0;
 }
+
+/* 显存「内存映射」分段条 — 签名元素 */
+.mem-map {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(40, 1fr);
+  gap: 2px;
+  height: 14px;
+}
+.mem-cell {
+  border-radius: 1px;
+  background: var(--surface-3);
+}
+.mem-cell.filled {
+  background: var(--info);
+}
+.mem-map.m-ok .mem-cell.filled { background: var(--ok); }
+.mem-map.m-warn .mem-cell.filled { background: var(--warn); }
+.mem-map.m-danger .mem-cell.filled { background: var(--danger); }
+
+.util-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.util-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--info);
+  transition: width 0.4s ease;
+}
+.util-fill.u-ok { background: var(--ok); }
+.util-fill.u-warn { background: var(--warn); }
+.util-fill.u-danger { background: var(--danger); }
+
 .w-full {
   width: 100%;
 }
 .gpu-editor {
   width: 100%;
 }
-.gpu-row {
+.gpu-editor .gpu-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin: 0 0 8px;
 }
 .gpu-idx {
   width: 48px;
-  color: #909399;
+  color: var(--text-3);
   font-size: 13px;
   flex-shrink: 0;
 }
@@ -452,7 +590,7 @@ onUnmounted(() => {
   width: 110px;
 }
 .gpu-vram-unit {
-  color: #909399;
+  color: var(--text-3);
   font-size: 13px;
 }
 </style>

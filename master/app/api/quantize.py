@@ -9,13 +9,14 @@ from app.schemas.quantize import (
     QuantizeOut,
     QuantizeStatusUpdate,
 )
+from app.services.auth import require_roles
 from app.services.gguf import GGUFError, parse_gguf
 from app.services.quantize import build_quantize_command
 
 router = APIRouter(prefix="/api/quantize", tags=["quantize"])
 
 
-@router.post("", response_model=QuantizeOut)
+@router.post("", response_model=QuantizeOut, dependencies=[Depends(require_roles("admin", "operator"))])
 def create_quantize(payload: QuantizeCreate, db: Session = Depends(get_db)):
     mv = db.get(ModelVersion, payload.model_version_id)
     if mv is None:

@@ -10,6 +10,7 @@ from app.schemas.huggingface import (
     HfModelOut,
 )
 from app.services import huggingface as hf
+from app.services.auth import require_roles
 from app.services.downloader import start_download_job
 from app.config import settings
 
@@ -45,7 +46,7 @@ def model_files(repo_id: str):
         raise HTTPException(status_code=502, detail=str(exc))
 
 
-@router.post("/download", response_model=DownloadOut)
+@router.post("/download", response_model=DownloadOut, dependencies=[Depends(require_roles("admin", "operator"))])
 def create_download(payload: DownloadCreate, db: Session = Depends(get_db)):
     filename = payload.filename.replace("\\", "/").split("/")[-1]
     if not filename or filename in (".", ".."):

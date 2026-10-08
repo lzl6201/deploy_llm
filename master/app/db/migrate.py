@@ -33,6 +33,9 @@ _NEW_COLUMNS: dict[str, dict[str, str]] = {
     "servers": {
         "source": "VARCHAR(32) DEFAULT 'agent'",
     },
+    "users": {
+        "created_at": "DATETIME",
+    },
 }
 
 

@@ -46,7 +46,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deploymentsApi } from '../api'
 
@@ -126,14 +126,23 @@ async function scale(row) {
   }
 }
 
-onMounted(() => {
+function startPolling() {
+  stopPolling()
   load()
   timer = setInterval(load, 8000)
-})
+}
 
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
+function stopPolling() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
+onMounted(startPolling)
+onActivated(startPolling)
+onDeactivated(stopPolling)
+onUnmounted(stopPolling)
 </script>
 
 <style scoped>
@@ -145,6 +154,7 @@ onUnmounted(() => {
 }
 .title {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text);
 }
 </style>

@@ -170,15 +170,15 @@ function fmtSize(bytes) {
   flex: 1;
 }
 .icon-dir {
-  color: #e6a23c;
+  color: var(--accent);
   margin-right: 4px;
 }
 .icon-gguf {
-  color: #409eff;
+  color: var(--info);
   margin-right: 4px;
 }
 .icon-file {
-  color: #c0c4cc;
+  color: var(--text-3);
   margin-right: 4px;
 }
 .name-dir {

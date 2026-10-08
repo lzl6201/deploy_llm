@@ -1,7 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import MainLayout from '../layout/MainLayout.vue'
+import { getRole, isLoggedIn } from '../auth'
 
 const routes = [
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('../views/Login.vue'),
+    meta: { title: '登录' },
+  },
   {
     path: '/',
     component: MainLayout,
@@ -49,6 +56,12 @@ const routes = [
         component: () => import('../views/Monitor.vue'),
         meta: { title: '监控告警' },
       },
+      {
+        path: 'users',
+        name: 'Users',
+        component: () => import('../views/Users.vue'),
+        meta: { title: '用户管理', roles: ['admin'] },
+      },
     ],
   },
 ]
@@ -56,6 +69,18 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+})
+
+router.beforeEach((to) => {
+  const loggedIn = isLoggedIn()
+  if (to.path === '/login') {
+    return loggedIn ? '/dashboard' : true
+  }
+  if (!loggedIn) return '/login'
+  if (to.meta.roles && !to.meta.roles.includes(getRole())) {
+    return '/dashboard'
+  }
+  return true
 })
 
 router.afterEach((to) => {

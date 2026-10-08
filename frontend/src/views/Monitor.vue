@@ -8,21 +8,25 @@
     </div>
 
     <div class="stat-row">
-      <el-card shadow="never">
-        <div class="stat"><span class="num">{{ overview.nodes_online }}/{{ overview.nodes_total }}</span><span class="label">在线节点</span></div>
-      </el-card>
-      <el-card shadow="never">
-        <div class="stat"><span class="num">{{ overview.gpus_total }}</span><span class="label">GPU 总数</span></div>
-      </el-card>
-      <el-card shadow="never">
-        <div class="stat"><span class="num">{{ overview.running_deployments }}</span><span class="label">运行实例</span></div>
-      </el-card>
-      <el-card shadow="never">
-        <div class="stat"><span class="num">{{ vramText }}</span><span class="label">显存使用</span></div>
-      </el-card>
+      <div class="telemetry">
+        <span class="t-label">在线节点</span>
+        <span class="t-value mono accent">{{ overview.nodes_online }}<span class="unit">/{{ overview.nodes_total }}</span></span>
+      </div>
+      <div class="telemetry">
+        <span class="t-label">GPU 总数</span>
+        <span class="t-value mono">{{ overview.gpus_total }}</span>
+      </div>
+      <div class="telemetry">
+        <span class="t-label">运行实例</span>
+        <span class="t-value mono">{{ overview.running_deployments }}</span>
+      </div>
+      <div class="telemetry">
+        <span class="t-label">显存使用</span>
+        <span class="t-value mono">{{ vramUsedGb }}<span class="unit">/{{ vramTotalGb }} GB</span></span>
+      </div>
     </div>
 
-    <el-card shadow="never" class="alert-card">
+    <el-card class="alert-card">
       <template #header>
         <div class="card-header">
           <span class="title">告警</span>
@@ -81,7 +85,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { monitorApi } from '../api'
 
@@ -102,12 +106,8 @@ const loading = ref(false)
 const openOnly = ref(true)
 let timer = null
 
-const vramText = computed(() => {
-  const used = overview.value.vram_used_mb || 0
-  const total = overview.value.vram_total_mb || 0
-  if (!total) return '0 / 0 GB'
-  return `${(used / 1024).toFixed(0)} / ${(total / 1024).toFixed(0)} GB`
-})
+const vramUsedGb = computed(() => ((overview.value.vram_used_mb || 0) / 1024).toFixed(0))
+const vramTotalGb = computed(() => ((overview.value.vram_total_mb || 0) / 1024).toFixed(0))
 
 async function load() {
   loading.value = true
@@ -173,14 +173,23 @@ function fmtTime(ts) {
   return new Date(ts).toLocaleString()
 }
 
-onMounted(() => {
+function startPolling() {
+  stopPolling()
   load()
   timer = setInterval(load, 5000)
-})
+}
 
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
+function stopPolling() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
+onMounted(startPolling)
+onActivated(startPolling)
+onDeactivated(stopPolling)
+onUnmounted(stopPolling)
 </script>
 
 <style scoped>
@@ -188,10 +197,10 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 .page-desc {
-  color: #909399;
+  color: var(--text-2);
   font-size: 13px;
 }
 .toolbar-actions {
@@ -201,22 +210,37 @@ onUnmounted(() => {
 .stat-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 18px;
 }
-.stat {
+.telemetry {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
-.stat .num {
-  font-size: 24px;
+.t-label {
+  font-size: 12px;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+.t-value {
+  font-size: 28px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text);
+  line-height: 1;
 }
-.stat .label {
-  color: #909399;
-  font-size: 13px;
+.t-value.accent {
+  color: var(--accent-hi);
+}
+.t-value .unit {
+  font-size: 15px;
+  color: var(--text-3);
+  font-weight: 500;
+  margin-left: 2px;
 }
 .card-header {
   display: flex;
@@ -225,7 +249,8 @@ onUnmounted(() => {
 }
 .title {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text);
 }
 .header-actions {
   display: flex;

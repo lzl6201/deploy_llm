@@ -68,7 +68,8 @@ def evaluate_alerts(db: Session) -> None:
             _resolve(db, key)
             continue
         age = (now - srv.last_seen).total_seconds()
-        if srv.status != "offline" and age > settings.heartbeat_timeout:
+        if age > settings.heartbeat_timeout:
+            srv.status = "offline"  # 心跳超时标记离线，避免死节点仍显示 online
             _raise_or_keep(
                 db, key, srv.id, "heartbeat_lost", "critical",
                 f"节点 {srv.hostname} 心跳丢失（{int(age)}s 未上报）",

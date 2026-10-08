@@ -73,6 +73,19 @@ class Settings:
             "HF_DOWNLOAD_DIR", os.getenv("MODEL_STORAGE_BASE", "/mnt/models")
         )
     )
+    # 用户鉴权（JWT）与默认管理员
+    jwt_secret: str = field(
+        default_factory=lambda: os.getenv("JWT_SECRET", "change-me-jwt-secret")
+    )
+    jwt_expire_minutes: int = field(
+        default_factory=lambda: int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
+    )
+    admin_username: str = field(
+        default_factory=lambda: os.getenv("ADMIN_USERNAME", "admin")
+    )
+    admin_password: str = field(
+        default_factory=lambda: os.getenv("ADMIN_PASSWORD", "admin123")
+    )
 
 
 settings = Settings()

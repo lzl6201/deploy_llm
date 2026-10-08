@@ -206,13 +206,14 @@ onMounted(async () => {
 <style scoped>
 .title {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text);
 }
 .w-full {
   width: 100%;
 }
 .hint {
-  color: #909399;
+  color: var(--text-3);
   font-size: 13px;
   padding: 12px 0;
 }

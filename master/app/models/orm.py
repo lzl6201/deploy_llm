@@ -167,6 +167,7 @@ class User(Base):
     username = Column(String(64), unique=True, index=True)
     password_hash = Column(String(255))
     role = Column(String(32), default="viewer")  # admin / operator / viewer
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Alert(Base):

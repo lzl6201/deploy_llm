@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.models.orm import Alert
 from app.schemas.monitor import AlertOut, OverviewOut
 from app.services import monitor
+from app.services.auth import require_roles
 
 router = APIRouter(prefix="/api/monitor", tags=["monitor"])
 
@@ -24,7 +25,7 @@ def list_alerts(open_only: bool = False, db: Session = Depends(get_db)):
     return q.limit(200).all()
 
 
-@router.post("/alerts/{alert_id}/ack")
+@router.post("/alerts/{alert_id}/ack", dependencies=[Depends(require_roles("admin", "operator"))])
 def ack_alert(alert_id: int, db: Session = Depends(get_db)):
     alert = db.get(Alert, alert_id)
     if alert is None:

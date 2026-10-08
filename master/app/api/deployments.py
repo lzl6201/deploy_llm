@@ -15,6 +15,7 @@ from app.schemas.deployment import (
     ScaleRequest,
 )
 from app.services import scheduler
+from app.services.auth import require_roles
 from app.services.engine import get_engine
 from app.services.engine.base import DeployRequest
 from app.services.model_meta import model_version_input
@@ -23,7 +24,7 @@ from app.services.recommend_engine import _engine_for
 router = APIRouter(prefix="/api/deployments", tags=["deployments"])
 
 
-@router.post("/place", response_model=list[PlacementOut])
+@router.post("/place", response_model=list[PlacementOut], dependencies=[Depends(require_roles("admin", "operator"))])
 def preview_placement(payload: PlacementRequest, db: Session = Depends(get_db)):
     """放置预览：返回按分数降序的候选节点（不落库）。"""
     mv = db.get(ModelVersion, payload.model_version_id)
@@ -34,7 +35,7 @@ def preview_placement(payload: PlacementRequest, db: Session = Depends(get_db)):
     )
 
 
-@router.post("", response_model=DeploymentOut)
+@router.post("", response_model=DeploymentOut, dependencies=[Depends(require_roles("admin", "operator"))])
 def create_deployment(payload: DeploymentCreate, db: Session = Depends(get_db)):
     mv = db.get(ModelVersion, payload.model_version_id)
     if mv is None:
@@ -202,7 +203,7 @@ def update_status(
     return dep
 
 
-@router.post("/{deployment_id}/stop", response_model=DeploymentOut)
+@router.post("/{deployment_id}/stop", response_model=DeploymentOut, dependencies=[Depends(require_roles("admin", "operator"))])
 def stop_deployment(deployment_id: int, db: Session = Depends(get_db)):
     dep = db.get(Deployment, deployment_id)
     if dep is None:
@@ -214,7 +215,7 @@ def stop_deployment(deployment_id: int, db: Session = Depends(get_db)):
     return dep
 
 
-@router.post("/{deployment_id}/restart", response_model=DeploymentOut)
+@router.post("/{deployment_id}/restart", response_model=DeploymentOut, dependencies=[Depends(require_roles("admin", "operator"))])
 def restart_deployment(deployment_id: int, db: Session = Depends(get_db)):
     """重启：先停（stopping），Agent 停进程回传 stopped 后自动重新拉起。"""
     dep = db.get(Deployment, deployment_id)
@@ -239,7 +240,7 @@ def _place_replica(db, mv, tp_size, max_model_len, server_id):
         return scheduler.pick_best(db, mv, tp_size, max_model_len, server_id=None)
 
 
-@router.post("/{deployment_id}/scale")
+@router.post("/{deployment_id}/scale", dependencies=[Depends(require_roles("admin", "operator"))])
 def scale_deployment(
     deployment_id: int, payload: ScaleRequest, db: Session = Depends(get_db)
 ):

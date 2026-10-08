@@ -60,7 +60,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { modelsApi, quantizeApi, serversApi } from '../api'
 
@@ -129,7 +129,6 @@ async function submitCreate() {
 }
 
 onMounted(async () => {
-  await load()
   try {
     const [m, s] = await Promise.all([modelsApi.list(), serversApi.list()])
     models.value = m.data
@@ -137,12 +136,24 @@ onMounted(async () => {
   } catch (e) {
     ElMessage.error(e.message)
   }
-  timer = setInterval(load, 5000)
 })
 
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
+function startPolling() {
+  stopPolling()
+  load()
+  timer = setInterval(load, 5000)
+}
+
+function stopPolling() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
+onActivated(startPolling)
+onDeactivated(stopPolling)
+onUnmounted(stopPolling)
 </script>
 
 <style scoped>
@@ -154,7 +165,8 @@ onUnmounted(() => {
 }
 .title {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text);
 }
 .w-full {
   width: 100%;
